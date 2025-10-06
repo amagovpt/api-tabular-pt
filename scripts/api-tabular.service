@@ -1,0 +1,25 @@
+# Criar serviço systemd: /etc/systemd/system/api-tabular.service
+
+[Unit]
+Description=Serviço API Tabular + Métricas (uData Hydra)
+After=network.target
+
+[Service]
+Type=simple
+User=dev
+WorkingDirectory=/opt/api-tabular-pt
+ExecStart=/opt/api-tabular-pt/scripts/start_tabular.sh
+Restart=always
+RestartSec=5
+Environment=POETRY_VIRTUALENVS_CREATE=false
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+## Ativar o serviço
+
+#sudo systemctl daemon-reload
+#sudo systemctl enable api-tabular
+#sudo systemctl start api-tabular
