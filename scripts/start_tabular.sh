@@ -9,9 +9,17 @@ LOGDIR="$WORKDIR/logs"
 echo "Aguardando 20 segundos antes de iniciar serviços..."
 sleep 20
 
-# --- ADICIONE ESTA LINHA ---
 mkdir -p "$LOGDIR"
-# -------------------------
+
+# Verifica se o lsof está instalado, senão instala (Rocky Linux / RHEL)
+if ! command -v lsof &> /dev/null; then
+  echo "lsof não encontrado. Instalando..."
+  sudo dnf install -y lsof
+  if [ $? -ne 0 ]; then
+    echo "Erro: falha ao instalar o lsof. Verifique a conectividade e repositórios."
+    exit 1
+  fi
+fi
 
 # Liberar portas 8005 e 8006, se estiverem ocupadas
 for PORT in 8005 8006; do
@@ -19,19 +27,19 @@ for PORT in 8005 8006; do
   if [ -n "$PID" ]; then
     echo "Porta $PORT em uso por PID $PID. Matando processo..."
     kill -9 $PID
-    sleep 5   # Aguarda 5 segundos para liberar a porta (aumentei um pouco para maior segurança)
+    sleep 5   # Aguarda 5 segundos para liberar a porta
   fi
 done
 
-cd /opt/api-tabular
+cd "$WORKDIR"
 
 # Inicia o servidor da aplicação na porta 8005
 $POETRY_BIN run adev runserver -p8005 "$WORKDIR/api_tabular/app.py" > "$LOGDIR/app.log" 2>&1 &
+
 # Inicia o servidor de métricas na porta 8007
 $POETRY_BIN run adev runserver -p8007 "$WORKDIR/api_tabular/metrics.py" > "$LOGDIR/metrics.log" 2>&1 &
 
 wait
 
-## Tornar script de inicializaçãon executável: /opt/hydra/start_hydra.sh
-# chmod +x /opt/api-tabular/start_tabular.sh
-
+## Tornar script de inicialização executável:
+# chmod +x /opt/api-tabular-pt/start_tabular.sh
