@@ -1,8 +1,60 @@
 # Changelog
 
-## Current (in progress)
+## 0.2.11 (2026-01-06)
 
-- Return HTTP 410 Gone response for deleted resources [#56](https://github.com/datagouv/api-tabular/pull/56)
+- chore: move pyproject optional-dependencies to dependency-groups ([#78](https://github.com/datagouv/api-tabular/pull/78))
+- chore: remove trailing slashes in changelog entries
+- fix: fix tag_version.sh to work with MacOS ([#77](https://github.com/datagouv/api-tabular/pull/77))
+- fix: move aiohttp-devtools to production dependencies ([#84](https://github.com/datagouv/api-tabular/pull/84))
+- Handle `null` values in filters ([#82](https://github.com/datagouv/api-tabular/pull/82))
+- Lift filter restriction on indexed tables ([#81](https://github.com/datagouv/api-tabular/pull/81))
+
+
+## 0.2.10 (2025-12-08)
+
+- feat: better sentry config sending envs ([#79](https://github.com/datagouv/api-tabular/pull/79))
+
+
+## 0.2.9 (2025-11-24)
+
+- Add operators and fix discrepancies ([#76](https://github.com/datagouv/api-tabular/pull/76))
+- chore: update docker compose to bump postgrest version from 12 to 14 ([#71](https://github.com/datagouv/api-tabular/pull/71))
+- ci: use latest debian version for docker containers in CI ([#70](https://github.com/datagouv/api-tabular/pull/70))
+- docs: fix README ([#73](https://github.com/datagouv/api-tabular/pull/73))
+- feat: better health check for metrics API ([#72](https://github.com/datagouv/api-tabular/pull/72))
+- fix: dynamic version and fix app name in Swagger ([#69](https://github.com/datagouv/api-tabular/pull/69))
+
+
+## 0.2.8 (2025-10-21)
+
+- docs: fix python versions constraints inconsistencies ([#67](https://github.com/datagouv/api-tabular/pull/67))
+- fix: fix version in health check ([#68](https://github.com/datagouv/api-tabular/pull/68))
+
+
+## 0.2.7 (2025-10-21)
+
+- build: use dynamic versioning with setuptools_scm ([#66](https://github.com/datagouv/api-tabular/pull/66))
+- chore: update lock file
+- docs: clean changelog to adapt to new tag_version.sh atomated changes
+- fix: fix tag_version.sh
+- Remove examples to prevent default values ([#64](https://github.com/datagouv/api-tabular/pull/64))
+- style: better commit message for tag_version.sh
+
+
+## 0.2.6 (2025-10-13)
+
+- build: replace bump'r with tag_version.sh script ([#63](https://github.com/datagouv/api-tabular/pull/63))
+- build: use uv for lock file and in CI ([#59](https://github.com/datagouv/api-tabular/pull/59))
+- chore: add debug steps in CI
+- docs: update changelog
+- feat: HTTP response 410 on deleted resource ([#56](https://github.com/datagouv/api-tabular/pull/56))
+- feat: include dataset information in 410 error message for deleted resources ([#58](https://github.com/datagouv/api-tabular/pull/58))
+- Fix CI ([#62](https://github.com/datagouv/api-tabular/pull/62))
+- Fix swagger structure according to guidelines ([#60](https://github.com/datagouv/api-tabular/pull/60))
+- fix: fix permissions on the tag_version.sh script
+- Revert "chore: add debug steps in CI"
+- style: better commit message for tag_version.sh
+- Update to version 0.2.6.dev for next development cycle
 
 ## 0.2.5 (2025-07-21)
 

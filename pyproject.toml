@@ -1,41 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "udata-hydra-csvapi"
-version = "0.2.6.dev"
+dynamic = ["version"]
 description = "API for CSV converted by udata-hydra"
 authors = [
-    {name = "data.gouv.fr", email = "opendatateam@data.gouv.fr"}
+    {name = "data.gouv.fr", email = "opendatateam@data.gouv.fr"},
 ]
-license = {text = "MIT"}
-readme = "README.md"
-requires-python = ">=3.11,<3.13"
 dependencies = [
-    "aiohttp>=3.8.4",
-    "aiohttp-cors==0.7.0",
-    "aiohttp-swagger==1.0.16",
-    "sentry-sdk>=2.13.0",
-    "aiohttp-devtools (>=1.1.2,<2.0.0)",
+    "aiohttp>=3.13.3,<4.0.0",
+    "aiohttp-cors>=0.8.1,<1.0.0",
+    "aiohttp-swagger>=1.0.16,<2.0.0",
+    "aiohttp-devtools>=1.1.2,<2.0.0",  # TODO: temporary, should use python -m api_tabular.app instead of adev in production
+    "sentry-sdk>=2.49.0,<3.0.0",
 ]
+requires-python = "<3.14,>=3.11"
+license = "MIT"
+readme = "README.md"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "aiohttp-devtools>=1.0.post0",
-    "aioresponses>=0.7.4",
-    "bumpx>=0.3.10",
-    "pytest>=7.2.1",
-    "pytest-asyncio>=0.20.3",
-    "pytest-mock>=3.14.0",
-    "ruff>=0.6.5",
-]
-
-[tool.poetry]
-packages = [
-    { include = "api_tabular" }
+    "aioresponses<1.0.0,>=0.7.4",
+    "pytest<8.0.0,>=7.2.1",
+    "pytest-asyncio<1.0.0,>=0.20.3",
+    "pytest-mock<4.0.0,>=3.10.0",
+    "ruff<1.0.0,>=0.6.5",
 ]
 
 [tool.ruff]
 lint = { extend-select = ["I"], ignore = ["F401"] } # ["I"] is to also sort imports with an isort rule # TODO: remove ignore F401 later
 line-length = 100
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.setuptools.packages.find]
+include = ["api_tabular*"]
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"

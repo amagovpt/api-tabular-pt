@@ -14,28 +14,27 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
 ### 📋 Requirements
 
-- **Python** >= 3.11, < 3.13
-- **[Poetry](https://python-poetry.org/)** >= 2.0.0 (for dependency management)
+- **Python** >= 3.11, < 3.14
+- **[uv](https://docs.astral.sh/uv/)** for dependency management
 - **Docker & Docker Compose**
 
 ### 🧪 Run with a test database
 
 1. **Start the Infrastructure**
 
-   Start this project via `docker compose`:
+   Start the test CSV database and test PostgREST container:
    ```shell
-   docker compose up
+   docker compose --profile test up -d
    ```
-
-   This starts PostgREST container and PostgreSQL container with fake test data. You can access the raw PostgREST API on http://localhost:8080.
+   The `--profile test` flag tells Docker Compose to start the PostgREST and PostgreSQL services for the test CSV database. This starts PostgREST on port 8080, connecting to the test CSV database. You can access the raw PostgREST API on http://localhost:8080.
 
 2. **Launch the main API proxy**
 
    Install dependencies and start the proxy services:
    ```shell
-   poetry install
-   poetry run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
-   poetry run adev runserver -p8006 api_tabular/metrics.py    # Api related to udata's metrics
+   uv sync
+   uv run adev runserver -p8005 api_tabular/tabular/app.py        # Api related to apified CSV files by udata-hydra
+   uv run adev runserver -p8006 api_tabular/metrics/app.py    # Api related to udata's metrics
    ```
 
    The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
@@ -53,27 +52,42 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
 To use the API with a real database served by [Hydra](https://github.com/datagouv/hydra) instead of the fake test database:
 
-1. **Configure the PostgREST endpoint** to point to your Hydra database:
+1. **Start the real Hydra CSV database locally:**
 
+   First, you need to have Hydra CSV database running locally. See the [Hydra repository](https://github.com/datagouv/hydra) for instructions on how to set it up. Make sure the Hydra CSV database is accessible on `localhost:5434`.
+
+2. **Start PostgREST pointing to your local Hydra database:**
    ```shell
-   export PGREST_ENDPOINT="http://your-hydra-postgrest:8080"
+   docker compose --profile hydra up -d
    ```
-
-   Or create a `config.toml` file:
-   ```toml
-   PGREST_ENDPOINT = "http://your-hydra-postgrest:8080"
-   ```
-
-2. **Start only the API services** (skip the fake database):
+   The `--profile hydra` flag tells Docker Compose to start the PostgREST service configured for a local real Hydra CSV database (instead of the test one provided by the docker compose in this repo). By default, this starts PostgREST on port 8080. You can customize the port using the `PGREST_PORT` environment variable:
    ```shell
-   poetry install
-   poetry run adev runserver -p8005 api_tabular/app.py
-   poetry run adev runserver -p8006 api_tabular/metrics.py
+   # Use default port 8080
+   docker compose --profile hydra up -d
+
+   # Use custom port (e.g., 8081)
+   PGREST_PORT=8081 docker compose --profile hydra up -d
    ```
 
-3. **Use real resource IDs** from your Hydra database instead of the test IDs.
+3. **Configure the API to use it:**
+   ```shell
+   # If using default port 8080
+   export PGREST_ENDPOINT="http://localhost:8080"
 
-**Note:** Make sure your Hydra PostgREST instance is accessible and the database schema matches the expected structure (tables in the `csvapi` schema).
+   # If using custom port (e.g., 8081)
+   export PGREST_ENDPOINT="http://localhost:8081"
+   ```
+
+4. **Start the API services:**
+   ```shell
+   uv sync
+   uv run adev runserver -p8005 api_tabular/tabular/app.py
+   uv run adev runserver -p8006 api_tabular/metrics/app.py
+   ```
+
+5. **Use real resource IDs** from your Hydra database instead of the test IDs.
+
+**Note:** Make sure your Hydra CSV database is accessible and the database schema matches the expected structure. The test database uses the `csvapi` schema, while real Hydra databases typically use the `public` schema.
 
 
 ## 📚 API Documentation
@@ -210,21 +224,33 @@ Returns OpenAPI/Swagger documentation specific to this resource.
 
 ### Query Operators
 
-The data endpoint can be queried with the following operators as query string (replacing `column_name` with the name of an actual column), if the column type allows it (see the swagger for each column's allowed parameter):
+The data endpoint can be queried with the following operators as query string (replacing `column_name` with the name of an actual column), if the column type allows it (see the swagger for each column's allowed parameters):
 
 #### Filtering Operators
 ```
-# exact value
+# exact
 column_name__exact=value
 
 # differs
 column_name__differs=value
 
-# contains (for strings only)
+# is `null`
+column_name__isnull
+
+# is not `null`
+column_name__isnotnull
+
+# contains
 column_name__contains=value
+
+# does not contain (value does not contain)
+column_name__notcontains=value
 
 # in (value in list)
 column_name__in=value1,value2,value3
+
+# notin (value not in list)
+column_name__notin=value1,value2,value3
 
 # less
 column_name__less=value
@@ -247,7 +273,7 @@ column_name__sort=desc
 ```
 
 #### Aggregation Operators
-> ⚠️ **WARNING**: Aggregation requests are only available for resources that are listed in the `ALLOW_AGGREGATION` list of the config file, which can be seen at the `/api/aggregation-exceptions/` endpoint.
+> ⚠️ **WARNING**: Aggregation requests are only available for resources that are listed in the `ALLOW_AGGREGATION` list of the config file, which can be seen at the `/api/aggregation-exceptions/` endpoint, and on columns that have an index.
 
 ```
 # group by values
@@ -270,6 +296,8 @@ column_name__sum
 ```
 
 > **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
+
+> ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now, except `isnull` and `isnotnull`.
 
 #### Pagination
 ```
@@ -412,6 +440,10 @@ export PGREST_ENDPOINT="http://my-postgrest:8080"
 export PAGE_SIZE_DEFAULT=50
 export SENTRY_DSN="https://your-sentry-dsn"
 ```
+Once the containers are up and running, you can directly query PostgREST on:
+`<PGREST_ENDPOINT>/<table_name>?<filters>`
+like for example:
+`http://localhost:8080/eb7a008177131590c2f1a2ca0?decompte=eq.10`
 
 ### Custom Configuration File
 
@@ -423,22 +455,22 @@ export CSVAPI_SETTINGS="/path/to/your/config.toml"
 
 ## 🧪 Testing
 
-This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two tests containers running for the tests to run.
+This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two test containers running for the tests to run (see [### 🧪 Run with a test database](#-run-with-a-test-database) for setup instructions).
 
 ### Running Tests
 
 ```shell
 # Run all tests
-poetry run pytest
+uv run pytest
 
 # Run specific test file
-poetry run pytest tests/test_api.py
+uv run pytest tests/test_api.py
 
 # Run tests with verbose output
-poetry run pytest -v
+uv run pytest -v
 
 # Run tests and show print statements
-poetry run pytest -s
+uv run pytest -s
 ```
 
 ### Tests Structure
@@ -462,7 +494,7 @@ This project follows PEP 8 style guidelines using [Ruff](https://astral.sh/ruff/
 
 ```shell
 # Lint and sort imports, and format code
-poetry run ruff check  --select I --fix && poetry run ruff format
+uv run ruff check  --select I --fix && uv run ruff format
 ```
 
 ### 🔗 Pre-commit Hooks
@@ -471,9 +503,9 @@ This repository uses a [pre-commit](https://pre-commit.com/) hook which lint and
 
 **Install pre-commit hooks:**
 ```shell
-poetry run pre-commit install
+uv run pre-commit install
 ```
-The re-commit hook that automatically:
+The pre-commit hook that automatically:
 - Check YAML syntax
 - Fix end-of-file issues
 - Remove trailing whitespace
@@ -485,15 +517,28 @@ The re-commit hook that automatically:
 **Pull requests cannot be merged unless all CI/CD tests pass.**
 Tests are automatically run on every pull request and push to main branch. See [`.circleci/config.yml`](.circleci/config.yml) for the complete CI/CD configuration, and the [🧪 Testing](#-testing) section above for detailed testing commands.
 
-### 📦 Version Management
+### 🏷️ Releases and versioning
 
-The release process uses [bump'X](https://github.com/datagouv/bumpx):
-```shell
-# To perform a dry run of version bumping
-poetry run bumpx -v -d
-# To bump version
-poetry run bumpx
+The release process uses the [`tag_version.sh`](tag_version.sh) script to create git tags, GitHub releases and update [CHANGELOG.md](CHANGELOG.md) automatically. Package version numbers are automatically derived from git tags using [setuptools_scm](https://github.com/pypa/setuptools_scm), so no manual version updates are needed in `pyproject.toml`.
+
+**Prerequisites**: [GitHub CLI](https://cli.github.com/) must be installed and authenticated, and you must be on the main branch with a clean working directory.
+
+```bash
+# Create a new release
+./tag_version.sh <version>
+
+# Example
+./tag_version.sh 2.5.0
+
+# Dry run to see what would happen
+./tag_version.sh 2.5.0 --dry-run
 ```
+
+The script automatically:
+- Extracts commits since the last tag and formats them for CHANGELOG.md
+- Identifies breaking changes (commits with `!:` in the subject)
+- Creates a git tag and pushes it to the remote repository
+- Creates a GitHub release with the changelog content
 
 ## 📄 License
 
