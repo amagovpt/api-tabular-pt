@@ -11,9 +11,6 @@ parameters:
   publish-branch:
     type: string
     default: "master"
-  cache-prefix:
-    type: string
-    default: "py-cache-v2"
   api-port:
     type: string
     default: "8005"
@@ -21,31 +18,29 @@ parameters:
 jobs:
   lint:
     docker:
-      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie
     steps:
       - checkout
       - run:
-          name: Install Python dev dependencies only with Poetry
-          command: |
-            poetry config virtualenvs.in-project true
-            poetry install --no-root --extras "dev"
+          name: Install Python dependencies
+          command: uv sync --frozen
       - run:
           name: Lint and format code and sort imports
           # ruff check --select I . : check linting and imports sorting without fixing (to fix, use --fix)
           # ruff format --check . : check code formatting without fixing (to fix, remove --check)
           command: |
-            poetry run ruff check --select I .
-            poetry run ruff format --check .
+            uv run ruff check --select I .
+            uv run ruff format --check .
 
   tests:
     machine:
-      image: ubuntu-2004:current  # Machine executor needed to run Docker containers (PostgreSQL + PostgREST)
+      image: ubuntu-2404:current  # Machine executor needed to run Docker containers (PostgreSQL + PostgREST)
     steps:
       - checkout
       - run:
-          name: Start containers
+          name: Start test containers
           command: |
-            docker compose up -d
+            docker compose --profile test up -d
       - run:
           name: Wait for PostgreSQL to be ready
           command: |
@@ -57,66 +52,40 @@ jobs:
             # Wait for PostgREST to be ready
             timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
       - run:
-          name: Install Python << pipeline.parameters.python-version >>, Poetry and dependencies
+          name: Install uv and dependencies and dev dependencies
           command: |
-            sudo add-apt-repository ppa:deadsnakes/ppa
-            sudo apt-get update
-            sudo apt-get install -y python<< pipeline.parameters.python-version >>
-            curl -sSL https://install.python-poetry.org | python<< pipeline.parameters.python-version >> -
-            /home/circleci/.local/bin/poetry config virtualenvs.in-project true
-            /home/circleci/.local/bin/poetry install --extras "dev"
-      - run:
-          name: Start service
-          command: |
-            nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
-            sleep 5
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            uv python install << pipeline.parameters.python-version >>
+            uv sync --frozen
       - run:
           name: Run tests
           command: |
-            /home/circleci/.local/bin/poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+            export PATH="$HOME/.local/bin:$PATH"
+            uv run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
 
   build:
     docker:
-      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie
     steps:
       - checkout
       - run:
-          name: Install Python dependencies with Poetry
+          name: Compute RELEASE_VERSION via setuptools_scm
           command: |
-            poetry config virtualenvs.in-project true
-            poetry install --no-root
+            uv pip install --system setuptools-scm
+            # derive from setuptools_scm or base version + build number
+            RELEASE_VERSION=$(python -m setuptools_scm)
+            echo "Building a wheel release with version $RELEASE_VERSION"
+            echo "Build number: $CIRCLE_BUILD_NUM"
+            echo "Commit hash: ${CIRCLE_SHA1:0:7}"
+            echo "Git tag: $CIRCLE_TAG"
       - run:
-          name: Set the version number
+          name: Build a distributable package as a wheel release
           command: |
-            if [[ $CIRCLE_TAG ]]; then
-                export PACKAGE_VERSION=$CIRCLE_TAG
-            elif [[ $CIRCLE_BRANCH == << pipeline.parameters.publish-branch >> ]]; then
-                # for main branches, can't add the commit hash since it's not a valid format for publishing
-                export PACKAGE_VERSION=$(poetry version -s)$CIRCLE_BUILD_NUM
-            else
-                # for feature branches, add the commit hash
-                export PACKAGE_VERSION=$(poetry version -s)$CIRCLE_BUILD_NUM+${CIRCLE_SHA1:0:7}
-            fi
-            # Display some debug info
-            echo "Building a wheel release with version $PACKAGE_VERSION, build number: $CIRCLE_BUILD_NUM, commit hash: ${CIRCLE_SHA1:0:7}, tag: $CIRCLE_TAG."
-            # Save the version number in a file
-            echo "export PACKAGE_VERSION=\"$PACKAGE_VERSION\"" >> .env_vars
-      - run:
-          name: Build a distributable package
-          command: |
-            # Get the version number
-            source .env_vars
-            # Build a wheel release
-            if [[ $CIRCLE_TAG ]]; then
-                # This is a tagged release, version has been handled upstream
-                poetry build
-            else
-                # Relies on a dev version like "1.2.1.dev" by default
-                poetry version $PACKAGE_VERSION
-                poetry build
-            fi
+            uv build --wheel
+      # Build already executed above; artifacts are in dist/
       - store_artifacts:
           path: dist
       - persist_to_workspace:
@@ -126,14 +95,14 @@ jobs:
 
   publish:
     docker:
-      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie-slim
     steps:
       - attach_workspace:
           at: .
       - run:
           name: Publish on PyPI
           command: |
-            poetry publish --username "${PYPI_USERNAME}" --password "${PYPI_PASSWORD}" --no-interaction
+            uv publish --username "${PYPI_USERNAME}" --password "${PYPI_PASSWORD}"
 
 workflows:
   build-test-deploy:
@@ -148,8 +117,8 @@ workflows:
               only: /v[0-9]+(\.[0-9]+)*/
       - build:
           requires:
-            - tests
             - lint
+            - tests
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
