@@ -1,19 +1,23 @@
-
 services:
+  # PostgREST for real Hydra database (used for development with real data)
   postgrest:
-    image: "postgrest/postgrest:v14.0"
+    image: 'postgrest/postgrest:v14.3'
     environment:
-      # connect to hydra database-csv
-      - PGRST_DB_URI=postgres://postgres:postgres@hydra-database-csv-1:5432/postgres # name of the hydra database service
-      - PGRST_SERVER_PORT=8080
+      # Connect to Hydra CSV database
+      - PGRST_DB_URI=postgres://postgres:postgres@hydra-pt-database-csv-1:5434/postgres
+      - PGRST_SERVER_PORT=${PGREST_PORT:-8080}
       - PGRST_DB_ANON_ROLE=postgres
       - PGRST_DB_SCHEMA=public
       - PGRST_DB_AGGREGATES_ENABLED=true
     ports:
-      - 8080:8080
+      - '${PGREST_PORT:-8080}:${PGREST_PORT:-8080}'
+    extra_hosts:
+      - 'hydra-pt-database-csv-1:host-gateway'
+    profiles:
+      - hydra
     networks:
-      - hydra_net
+      - hydra_default
 
 networks:
-  hydra_net:
+  hydra_default:
     external: true
