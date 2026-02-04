@@ -9,7 +9,7 @@ from aiohttp_swagger import setup_swagger
 
 from api_tabular import config
 from api_tabular.core.health import check_health
-from api_tabular.core.sentry import sentry_kwargs
+from api_tabular.core.sentry import get_sentry_kwargs
 from api_tabular.core.swagger import build_swagger_file
 from api_tabular.core.url import build_link_with_page, url_for
 from api_tabular.core.utils import build_offset
@@ -24,7 +24,7 @@ from api_tabular.tabular.utils import (
 
 routes = web.RouteTableDef()
 
-sentry_sdk.init(**sentry_kwargs)
+sentry_sdk.init(**get_sentry_kwargs())
 
 
 @routes.get(r"/api/resources/{rid}/", name="meta")
@@ -158,7 +158,7 @@ async def app_factory():
         app["start_time"] = datetime.now(timezone.utc)
         app["app_version"] = await get_app_version()
 
-        with open("ressource_app_swagger.yaml", "r") as f:
+        with open("tabular_swagger.yaml", "r") as f:
             swagger_info = yaml.safe_load(f)
         swagger_info["info"]["version"] = app["app_version"]
 
