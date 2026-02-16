@@ -31,6 +31,12 @@ CREATE TABLE IF NOT EXISTS public.site (
     user_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS resources_exceptions (
+    id SERIAL PRIMARY KEY,
+    resource_id UUID UNIQUE NOT NULL,
+    table_indexes JSONB DEFAULT '{}'::JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 
 -- 3. (Opcional) Índices para melhorar a performance
