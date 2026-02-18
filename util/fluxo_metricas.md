@@ -1,54 +1,93 @@
-# Fluxo de Métricas e Sincronização de Dados
+# Fluxo de Métricas: Matomo ➔ Hydra ➔ api-tabular ➔ MongoDB ➔ udata
 
-Este documento descreve o funcionamento do fluxo de métricas (views e downloads) no ecossistema do udata, baseado na análise técnica realizada no ambiente de desenvolvimento.
+Este documento detalha como as métricas (visualizações e downloads) circulam no ecossistema da plataforma, identificando os componentes envolvidos e o caminho que os dados percorrem.
 
-## 1. O Fluxo de Dados (Step-by-Step)
+## 1. Componentes do Fluxo
 
-O fluxo de métricas segue uma cadeia de quatro camadas distintas para garantir performance e desacoplamento:
+O ecossistema utiliza cinco componentes principais para gerir métricas:
 
-1.  **Rastreamento (Origem):**
-    - Quando um utilizador visualiza um dataset ou faz download de um recurso, o frontend (ou um redirecionamento de URL) envia um evento para o **Matomo (Piwik)**. No seu caso, o servidor Matomo está no IP `10.55.37.39`.
-    - Nesta fase, os dados são apenas logs brutos no banco de dados MySQL do Matomo.
+1.  **Matomo (Analytics):** O motor de rastreamento. Ele recebe "pings" do frontend sempre que alguém visita uma página ou clica num download.
+2.  **Hydra (PostgreSQL @ 5434):** Embora o Hydra seja primariamente um validador de recursos, no nosso ambiente a base de dados que ele gere serve como o **repositório de armazenamento de métricas agregadas**.
+3.  **api-tabular (Serviço de Métricas @ 8006):** Uma camada de API (Python + PostgREST) que expõe os dados do PostgreSQL de forma estruturada para o udata.
+4.  **MongoDB:** A base de dados principal do udata, que armazena os metadados dos datasets e os **totais consolidados das métricas**.
+5.  **udata update-metrics (Job):** O "sincronizador" que faz a ponte entre a API Tabular e o MongoDB.
 
-2.  **Agregação (Pipeline de Dados):**
-    - **Este é o elo crucial:** Deve existir um script ou processo (ex: Airflow ou cron job) que lê as visitas brutas do Matomo e calcula os totais por objeto e por mês.
-    - Este processo escreve os totais agregados na base de dados **PostgreSQL (porto 5434)** nas tabelas `datasets`, `resources`, etc.
-    - _Nota: Se este passo não correr, o udata nunca verá novas ações do site._
+---
 
-3.  **Exposição (Camada de API):**
-    - O serviço **`api-tabular`** (via PostgREST no porto 8006) expõe os dados do PostgreSQL.
-    - Ela serve como uma interface de leitura rápida para o udata.
+## 2. O Flow (Caminho do Dado)
 
-4.  **Sincronização (MongoDB e Frontend):**
-    - O comando **`udata job run update-metrics`** acorda e consulta a `api-tabular`.
-    - Ele lê os totais (ex: "500 visitas") e salva-os no campo `metrics` do **MongoDB**.
-    - O frontend do udata lê o MongoDB para exibir os números e gráficos na página do dataset.
+O fluxo é assíncrono e dividido em etapas para garantir que o site continue rápido:
 
-## 2. Perguntas Frequentes (FAQ)
+### Passo 1: Captura (Matomo)
 
-### O udata salva ações (cliques/views) diretamente no MongoDB?
+Quando um utilizador interage com o site, o evento é enviado para o Matomo.
 
-Não. Para evitar sobrecarga, o MongoDB guarda apenas os **totais consolidados**. Cada clique individual é gerido pelo Matomo para não atrasar a resposta do site ao utilizador.
+- **Estado:** O dado existe apenas como um log bruto (visita individual) no Matomo.
 
-### O job `update-metrics` vai buscar dados ao Matomo?
+### Passo 2: Agregação (Data Pipeline)
 
-Não. O `update-metrics` é apenas um sincronizador. Ele fala exclusivamente com a **`api-tabular`**. Ele assume que os dados já foram processados e inseridos no PostgreSQL por um processo anterior.
+Um processo externo (geralmente via Airflow ou Cron) lê os milhões de logs do Matomo e calcula os totais mensais por ID.
 
-### Como confirmar se as métricas estão a ser geradas corretamente?
+- **Ação:** Ele faz `INSERT` ou `UPDATE` nas tabelas `datasets` e `resources` da base de dados **PostgreSQL (Porto 5434)**.
+- **Estado:** Os totais consolidados agora existem na base de dados "Hydra".
 
-Se correr o `update-metrics` com o `cache flush` e os valores não mudarem, o problema está no **Passo 2 (Agregação)**. O udata só consegue sincronizar o que já existe no PostgreSQL. Pode testar inserindo dados manualmente no Postgres (porto 5434); se eles aparecerem no site após o job, a "ponte" Postgres -> Mongo está a funcionar bem.
+### Passo 3: Exposição (api-tabular)
 
-## 3. Comandos Úteis
+O serviço `api-tabular` monitoriza as tabelas no PostgreSQL e expõe-nas via HTTP.
 
-- **Sincronizar métricas para o site:**
-  ```bash
-  ./venv/bin/udata job run update-metrics
-  ```
-- **Limpar cache (para ver as alterações no frontend):**
-  ```bash
-  ./venv/bin/udata cache flush
-  ```
-- **Verificar o que a API de métricas está a devolver:**
-  ```bash
-  curl -s "http://localhost:8006/api/datasets_total/data/?dataset_id__exact=<ID_DO_DATASET>"
-  ```
+- **URL Exemplo:** `http://localhost:8006/api/datasets/data/`
+- **Estado:** O dado está pronto para ser consumido pelo udata.
+
+### Passo 4: Sincronização (udata job)
+
+O comando `./venv/bin/udata job run update-metrics` é executado.
+
+1.  Ele consulta a `api-tabular`.
+2.  Pega nos totais (ex: Dataset X tem 500 views).
+3.  Atualiza o documento do Dataset X no **MongoDB**.
+
+### Passo 5: Exibição (Frontend)
+
+O udata lê o MongoDB e mostra os números nas páginas.
+
+---
+
+## 3. O Happy Path (Caminho Ideal)
+
+Para que tudo funcione bem em tempo real:
+
+1.  O utilizador clica ➔ Matomo regista.
+2.  O **Pipeline de Agregação** corre com sucesso e popula o Postgres (Hydra).
+3.  A **api-tabular** está UP e a responder no porto 8006.
+4.  O job **update-metrics** corre e encontra dados na API.
+5.  O cache do udata é limpo (`udata cache flush`) para refletir os novos números.
+
+---
+
+## 4. O que está a faltar / Diagnóstico
+
+Se os dados estão no Matomo mas não aparecem no udata, a falha está normalmente em um destes dois pontos:
+
+### A. A Falha na Agregação (Matomo ➔ Postgres)
+
+Este é o erro mais comum. O Matomo tem os logs, mas ninguém os moveu para as tabelas de métricas no Postgres (porto 5434).
+
+- **Como testar:** Faça um `SELECT COUNT(*)` na tabela `datasets` no porto 5434. Se estiver vazia ou com dados antigos, o pipeline de agregação está parado.
+
+### B. O Job de Sincronização (Postgres ➔ MongoDB)
+
+O dado chegou ao Postgres, mas o `udata update-metrics` não foi corrido ou não conseguiu falar com a `api-tabular`.
+
+- **Como testar:** Tente aceder a `http://localhost:8006/api/datasets/data/` no seu browser. Se a API devolver `[]` (vazio) ou erro, o `update-metrics` não terá nada para importar.
+
+## 5. Próximos Passos Sugeridos
+
+1.  **Verificar o PostgreSQL:** Confirmar se as tabelas criadas pelo script `setup_metrics_tables.sql` têm dados.
+2.  **Validar a API:** Correr o comando curl:
+    ```bash
+    curl -s "http://localhost:8006/api/datasets/data/"
+    ```
+3.  **Correr o Sincronizador:** Se o passo 2 falhar, correr o job manualmente no ecossistema udata:
+    ```bash
+    udata job run update-metrics
+    ```
