@@ -13,11 +13,9 @@ services:
       - '${PGREST_PORT:-8080}:${PGREST_PORT:-8080}'
     extra_hosts:
       - 'hydra-pt-database-csv-1:host-gateway'
-    profiles:
-      - hydra
     networks:
-      - hydra_default
+      - hydra_net
 
 networks:
-  hydra_default:
+  hydra_net:
     external: true
