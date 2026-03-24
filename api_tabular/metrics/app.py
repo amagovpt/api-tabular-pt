@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import sentry_sdk
 import yaml
-from aiohttp import ClientSession, web
+from aiohttp import ClientSession, ClientTimeout, web
 from aiohttp_swagger import setup_swagger
 
 from api_tabular import config
@@ -98,7 +98,7 @@ async def get_health(request):
 
 async def app_factory():
     async def on_startup(app):
-        app["csession"] = ClientSession()
+        app["csession"] = ClientSession(timeout=ClientTimeout(total=10))
         app["started_at"] = datetime.now(timezone.utc)
         app["app_version"] = await get_app_version()
 
