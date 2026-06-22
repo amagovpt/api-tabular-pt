@@ -13,8 +13,12 @@ async def stream_data(
     url: str,
     accept_format: str,
     response_headers: dict,
+    extra_headers: dict | None = None,
 ) -> StreamResponse:
-    res = await session.head(f"{url}&limit=1&", headers={"Prefer": "count=exact"})
+    extra_headers = extra_headers or {}
+    res = await session.head(
+        f"{url}&limit=1&", headers={"Prefer": "count=exact", **extra_headers}
+    )
     if not res.ok:
         handle_exception(res.status, "Database error", await res.json(), None)
     total = process_total(res)
@@ -29,7 +33,8 @@ async def stream_data(
     await response.prepare(request)
 
     async with session.get(
-        url=f"{url}&limit={config.BATCH_SIZE}", headers={"Accept": accept_format}
+        url=f"{url}&limit={config.BATCH_SIZE}",
+        headers={"Accept": accept_format, **extra_headers},
     ) as res:
         if not res.ok:
             handle_exception(res.status, "Database error", await res.json(), None)

@@ -4,8 +4,8 @@ from aiohttp.web_request import Request
 from api_tabular.core.error import QueryException
 
 
-async def check_health(request: Request, url: str):
-    async with request.app["csession"].head(url) as res:
+async def check_health(request: Request, url: str, headers: dict | None = None):
+    async with request.app["csession"].head(url, headers=headers or {}) as res:
         if not res.ok:
             raise QueryException(
                 503,

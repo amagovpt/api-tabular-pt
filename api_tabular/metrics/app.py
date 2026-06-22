@@ -23,7 +23,7 @@ sentry_sdk.init(**get_sentry_kwargs())
 
 
 async def get_object_data(session: ClientSession, model: str, sql_query: str):
-    headers = {"Prefer": "count=exact"}
+    headers = {"Prefer": "count=exact", "Accept-Profile": "metric"}
     url = f"{config.PGREST_ENDPOINT}/{model}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:
@@ -86,6 +86,7 @@ async def metrics_data_csv(request):
         url=f"{config.PGREST_ENDPOINT}/{model}?{sql_query}",
         accept_format=mime,
         response_headers=response_headers,
+        extra_headers={"Accept-Profile": "metric"},
     )
 
 
@@ -93,7 +94,9 @@ async def metrics_data_csv(request):
 async def get_health(request):
     """Return health check status"""
     # pinging a specific metrics table that we know always exists, managed by a DAG (https://github.com/datagouv/datagouvfr_data_pipelines/blob/main/dgv/metrics/sql/create_tables.sql)
-    return await check_health(request, f"{config.PGREST_ENDPOINT}/site")
+    return await check_health(
+        request, f"{config.PGREST_ENDPOINT}/site", headers={"Accept-Profile": "metric"}
+    )
 
 
 async def app_factory():
