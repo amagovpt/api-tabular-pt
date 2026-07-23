@@ -10,14 +10,14 @@ RUN apt-get update -y && \
     rm -rf /var/lib/apt/lists/*
 
 # create user & group
-RUN groupadd --system datagouv && \
-    useradd --system --gid datagouv --create-home datagouv
+RUN groupadd --system dadosgov && \
+    useradd --system --gid dadosgov --create-home dadosgov
 
 # install
-WORKDIR /home/datagouv
-ADD . /home/datagouv/
-RUN chown -R datagouv:datagouv /home/datagouv
-USER datagouv
+WORKDIR /home/dadosgov
+ADD . /home/dadosgov/
+RUN chown -R dadosgov:dadosgov /home/dadosgov
+USER dadosgov
 RUN uv sync --frozen
 
 # run (ENV from ARG so shell can expand APP_MODULE at runtime)
