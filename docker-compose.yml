@@ -79,7 +79,7 @@ services:
       - "8005:8005"
     environment:
       - PGREST_ENDPOINT=http://postgrest:8080
-      - PAGE_SIZE_MAX=200
+      - PAGE_SIZE_MAX=1000
     depends_on:
       - postgrest
     profiles:
@@ -97,7 +97,7 @@ services:
       - "8006:8005"
     environment:
       - PGREST_ENDPOINT=http://postgrest:8080
-      - PAGE_SIZE_MAX=200
+      - PAGE_SIZE_MAX=1000
     depends_on:
       - postgrest
     profiles:
